@@ -2,6 +2,7 @@ package com.example.cbox.service;
 
 import com.example.cbox.annotation.TransactionalService;
 import com.example.cbox.dto.create.FileCreateEditDto;
+import com.example.cbox.dto.create.FileRenameDto;
 import com.example.cbox.dto.create.UserAuthDto;
 import com.example.cbox.dto.read.FileGetDto;
 import com.example.cbox.dto.read.FileReadDto;
@@ -82,19 +83,17 @@ public class FileService {
     public FileReadDto create(UserAuthDto dto, FileCreateEditDto fileDto) {
         Path path = Path.of(bucket, dto.id().toString(), fileDto.file().getOriginalFilename());
 
-        File curFile = new File();
-        curFile.setLink(fileDto.file().getOriginalFilename());
+        File curFile = File.builder().link(fileDto.file().getOriginalFilename())
+                .accessType(fileDto.accessType()).build();
         curFile.setCreatedBy(dto.id().toString());
         curFile.setModifiedBy(dto.id().toString());
         curFile.setCreatedAt(Instant.now());
         curFile.setModifiedAt(Instant.now());
-        curFile.setAccessType(fileDto.accessType());
 
         User userEntity = userRepository.findById(dto.id()).get();
 
-        LinkRestrictionBypass link = new LinkRestrictionBypass();
-        link.setUser(userEntity);
-        link.setFile(curFile);
+        LinkRestrictionBypass link = LinkRestrictionBypass.builder().userId(userEntity)
+                .fileId(curFile).build();
         fileRepository.save(curFile);
         linkRepository.save(link);
 
@@ -110,37 +109,41 @@ public class FileService {
 
     @Transactional
     @SneakyThrows
-    public Optional<FileReadDto> update(UserAuthDto userDto, FileCreateEditDto dto) {
+    public Optional<FileReadDto> update(UserAuthDto userDto, Long id, FileCreateEditDto dto) {
         Path path = Path.of(bucket, userDto.id().toString(), dto.file().getOriginalFilename());
         var inputStream = dto.file().getInputStream();
         try (inputStream) {
             Files.write(path, inputStream.readAllBytes(), CREATE, TRUNCATE_EXISTING);
         }
-        return fileRepository.findByLink(dto.file().getName())
-                .map(file -> {
-                    fileMapper.map(file, dto);
-                    return file;
-                })
-                .map(fileRepository::saveAndFlush)
+        return fileRepository.findById(id)
                 .map(fileMapper::toFileReadDto);
     }
 
     public Page<FileReadDto> findAllUserFiles(UserAuthDto user, Integer page, Integer limit) {
-        var optionalUser = userRepository.findById(user.id());
         PageRequest req = PageRequest.of(page - 1, limit);
-        var restrictionsBypass = optionalUser.get().getRestrictions();
-        List<FileReadDto> list = restrictionsBypass.stream()
-                .map(restriction -> fileMapper.toFileReadDto(restriction.getFileId()))
-                .toList();
-        int start = (int) req.getOffset();
-        int end = Math.min(start + req.getPageSize(), list.size());
-
-        List<FileReadDto> files = list.subList(start, end);
-        return new PageImpl<>(files, req, list.size());
+        return fileRepository.findAllByCreatedBy(user.id().toString(), req)
+                .map(fileMapper::toFileReadDto);
     }
 
     public Optional<FileReadDto> findFileByLink(String link) {
         return fileRepository.findByLink(link)
+                .map(fileMapper::toFileReadDto);
+    }
+
+    @Transactional
+    public Optional<FileReadDto> renameById(UserAuthDto dto, FileRenameDto fileDto) {
+        return fileRepository.findById(fileDto.id())
+                .map(file -> {
+
+                    var curFile = new java.io.File(bucket + "/" + dto.id().toString() + "/" + file.getLink());
+                    var newFile = new java.io.File(bucket + "/" + dto.id().toString() + "/" + fileDto.name());
+                    curFile.renameTo(newFile);
+
+                    file.setLink(fileDto.name());
+
+                    return file;
+                })
+                .map(fileRepository::save)
                 .map(fileMapper::toFileReadDto);
     }
 

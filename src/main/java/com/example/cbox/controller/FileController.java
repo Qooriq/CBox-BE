@@ -2,11 +2,13 @@ package com.example.cbox.controller;
 
 import com.example.cbox.annotation.ValidatedController;
 import com.example.cbox.dto.create.FileCreateEditDto;
+import com.example.cbox.dto.create.FileRenameDto;
 import com.example.cbox.dto.create.UserAuthDto;
 import com.example.cbox.dto.read.FileGetDto;
 import com.example.cbox.dto.read.FileReadDto;
 import com.example.cbox.dto.read.PageResponse;
 import com.example.cbox.service.FileService;
+import com.example.cbox.service.SearchEngine;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 import static org.springframework.http.ResponseEntity.*;
 
 @Slf4j
@@ -24,6 +28,7 @@ import static org.springframework.http.ResponseEntity.*;
 @RequiredArgsConstructor
 public class FileController {
     private final FileService fileService;
+    private final SearchEngine searchEngine;
 
     @GetMapping
     public ResponseEntity<PageResponse<FileReadDto>> findAll(@RequestParam(defaultValue = "1") @Min(1) Integer page,
@@ -47,6 +52,14 @@ public class FileController {
                 .orElseGet(notFound()::build);
     }
 
+    @PutMapping("/rename")
+    public ResponseEntity<FileReadDto> rename(@AuthenticationPrincipal UserAuthDto dto,
+                                              @RequestBody FileRenameDto fileDto) {
+        return fileService.renameById(dto, fileDto)
+                .map(file -> ok().body((file)))
+                .orElseGet(notFound()::build);
+    }
+
     @GetMapping("/get")
     public ResponseEntity<PageResponse<FileReadDto>> get(@AuthenticationPrincipal UserAuthDto user,
                                                          @RequestParam(defaultValue = "1") @Min(1) Integer page,
@@ -57,8 +70,9 @@ public class FileController {
     @SneakyThrows
     @PutMapping
     public ResponseEntity<FileReadDto> update(@AuthenticationPrincipal UserAuthDto dto,
-                                                @RequestParam FileCreateEditDto fileDto) {
-        return fileService.update(dto, fileDto)
+                                              @RequestParam Long id,
+                                              @ModelAttribute FileCreateEditDto fileDto) {
+        return fileService.update(dto, id, fileDto)
                 .map(obj -> ok().body(obj))
                 .orElseGet(notFound()::build);
     }
@@ -69,5 +83,13 @@ public class FileController {
         return fileService.delete(id)
                 ? noContent().build()
                 : notFound().build();
+    }
+
+    @PostMapping
+    public ResponseEntity<List<FileReadDto>> search(@AuthenticationPrincipal UserAuthDto dto,
+                                                    @RequestParam(defaultValue = "1") @Min(1) Integer page,
+                                                    @RequestParam(defaultValue = "10") @Min(1) @Max(100) Integer limit,
+                                                    @RequestBody String request) {
+        return ok().body(searchEngine.search(page, limit, request));
     }
 }
