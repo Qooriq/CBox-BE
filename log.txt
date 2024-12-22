@@ -62,3 +62,10 @@ Hibernate:
     from
         users u1_0
 2024-10-27T23:27:51.953+03:00  INFO 52099 --- [CBox] [nio-8080-exec-4] o.springdoc.api.AbstractOpenApiResource  : Init duration for springdoc-openapi is: 108 ms
+ERROR Authentification: Error: {"timestamp":"2024-11-25T13:54:21.207+00:00","status":403,"error":"Forbidden","path":"/users/sign-in"}
+COOL: [object Object]
+SUCCESS ENTER: [object Object]
+SUCCESS ENTER: [object Object]
+SUCCESS ENTER: [object Object]
+SUCCESS ENTER: [object Object]
+SUCCESS ENTER: [object Object]
