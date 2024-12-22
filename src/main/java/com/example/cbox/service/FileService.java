@@ -8,7 +8,6 @@ import com.example.cbox.dto.read.FileGetDto;
 import com.example.cbox.dto.read.FileReadDto;
 import com.example.cbox.entity.File;
 import com.example.cbox.entity.LinkRestrictionBypass;
-import com.example.cbox.entity.User;
 import com.example.cbox.mapper.FileMapper;
 import com.example.cbox.repository.FileRepository;
 import com.example.cbox.repository.LinkRepository;
@@ -17,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +24,6 @@ import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
 import static java.nio.file.StandardOpenOption.CREATE;
@@ -52,22 +49,28 @@ public class FileService {
 
     @SneakyThrows
     public Optional<FileGetDto> findById(UserAuthDto dto, Long id) {
-        return Optional.of(new FileGetDto(fileRepository.findById(id)
-                .map(file -> {
+        var file = fileRepository.findById(id);
+        return Optional.of(new FileGetDto(file
+                .map(curFile -> {
                     try {
-                        return new FileInputStream(bucket + "/" + dto.id().toString() + "/" + file.getLink());
+                        return new FileInputStream(bucket + "/" + dto.id().toString() + "/" + curFile.getLink());
                     } catch (FileNotFoundException e) {
                         return null;
                     }
                 })
-                .get().readAllBytes()));
+                .get().readAllBytes(),
+                file.get().getLink(),
+                file.get().getLink().substring(file.get().getLink().lastIndexOf('.'))));
     }
 
+    @SneakyThrows
     @Transactional
-    public boolean delete(Long id) {
+    public boolean delete(UserAuthDto dto, Long id) {
         var file = fileRepository.findById(id);
+        var curFile = new java.io.File(bucket + "/" + dto.id() + "/" + file.get().getLink());
+        curFile.delete();
         fileRepository.deleteById(id);
-        return file.isEmpty();
+        return !file.isEmpty();
     }
 
     @Transactional
@@ -90,9 +93,8 @@ public class FileService {
         curFile.setCreatedAt(Instant.now());
         curFile.setModifiedAt(Instant.now());
 
-        User userEntity = userRepository.findById(dto.id()).get();
-
-        LinkRestrictionBypass link = LinkRestrictionBypass.builder().userId(userEntity)
+        LinkRestrictionBypass link = LinkRestrictionBypass.builder()
+                .userId(userRepository.findById(dto.id()).get())
                 .fileId(curFile).build();
         fileRepository.save(curFile);
         linkRepository.save(link);
@@ -104,6 +106,8 @@ public class FileService {
         }
         return Optional.of(curFile)
                 .map(fileMapper::toFileReadDto)
+                .map(fileReadDto -> new FileReadDto(fileReadDto.id(), fileReadDto.link(),
+                        fileReadDto.link().substring(fileReadDto.link().lastIndexOf('.'))))
                 .orElseThrow();
     }
 
@@ -122,7 +126,9 @@ public class FileService {
     public Page<FileReadDto> findAllUserFiles(UserAuthDto user, Integer page, Integer limit) {
         PageRequest req = PageRequest.of(page - 1, limit);
         return fileRepository.findAllByCreatedBy(user.id().toString(), req)
-                .map(fileMapper::toFileReadDto);
+                .map(fileMapper::toFileReadDto)
+                .map(fileReadDto -> new FileReadDto(fileReadDto.id(), fileReadDto.link(),
+                        fileReadDto.link().substring(fileReadDto.link().lastIndexOf('.'))));
     }
 
     public Optional<FileReadDto> findFileByLink(String link) {

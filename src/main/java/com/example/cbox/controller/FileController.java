@@ -78,9 +78,10 @@ public class FileController {
     }
 
     @DeleteMapping
-    public ResponseEntity<Void> delete(@RequestParam Long id) {
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal UserAuthDto dto,
+                                       @RequestParam Long id) {
         log.info("delete() for file with id {} called", id);
-        return fileService.delete(id)
+        return fileService.delete(dto, id)
                 ? noContent().build()
                 : notFound().build();
     }
